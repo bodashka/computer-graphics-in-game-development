@@ -59,8 +59,8 @@ namespace cg::renderer
 		b = vertex_b.position;
 		c = vertex_c.position;
 
-		ba = b-a;
-		ca = c-a;
+		ba = b - a;
+		ca = c - a;
 
 		na = vertex_a.normal;
 		nb = vertex_b.normal;
@@ -159,9 +159,9 @@ namespace cg::renderer
 		// Lab: 2.01 Implement `set_render_target`, `set_viewport`, and `clear_render_target` methods of `raytracer` class
 		for (size_t i = 0; i < render_target->count(); i++) {
 			render_target->item(i) = in_clear_value;
+			// Lab: 2.06 Add `history` resource in `raytracer` class
 			history->item(i) = float3{0.f, 0.f, 0.f};
 		}
-		// Lab: 2.06 Add `history` resource in `raytracer` class
 	}
 
 	template<typename VB, typename RT>
@@ -186,6 +186,8 @@ namespace cg::renderer
 			auto& index_buffer = index_buffers[shape_id];
 			auto& vertex_buffer = vertex_buffers[shape_id];
 			size_t index_id = 0;
+
+			// Lab: 2.05 Implement `build_acceleration_structure` method of `raytracer` class
 			aabb<VB> aabb;
 			while (index_id < index_buffer->count()) {
 				triangle<VB> triangle(
@@ -199,7 +201,7 @@ namespace cg::renderer
 			}
 			acceleration_structures.push_back(aabb);
 		}
-		// Lab: 2.05 Implement `build_acceleration_structure` method of `raytracer` class
+		
 	}
 
 	template<typename VB, typename RT>
@@ -207,18 +209,19 @@ namespace cg::renderer
 			float3 position, float3 direction,
 			float3 right, float3 up, size_t depth, size_t accumulation_num)
 	{
-		// Lab: 2.01 Implement `ray_generation` and `trace_ray` method of `raytracer` class
+		// Lab: 2.06 Implement TAA in `ray_generation` method of `raytracer` class
 		float frame_weight = 1.f / static_cast<float>(accumulation_num);
+
+		// Lab: 2.01 Implement `ray_generation` and `trace_ray` method of `raytracer` class
 		for (int frame_id = 0; frame_id < accumulation_num; ++frame_id) {
 			std::cout << "Tracing frame # " << frame_id + 1 << "\n";
 			float2 jitter = get_jitter(frame_id);
 
-		
 			#pragma omp parallel for
 			for (int x = 0; x < width; x++) {
 				for (int y = 0; y < height; y++) {
-					float u = (2.f * x) / static_cast<float>(width - 1) - 1.f;
-					float v = (2.f * x) / static_cast<float>(height - 1) - 1.f;
+					float u = (2.f * x + jitter.x) / static_cast<float>(width - 1) - 1.f;
+					float v = (2.f * x + jitter.y) / static_cast<float>(height - 1) - 1.f;
 
 					u *= static_cast<float>(width) / static_cast<float>(height); //aspect ratio
 
@@ -226,6 +229,7 @@ namespace cg::renderer
 					ray ray(position, ray_direction);
 
 					payload payload = trace_ray(ray, depth);
+					//render_target->item(x, y) = RT::from_color(payload.color);
 
 					auto& history_pixel = history->item(x, y);
 					history_pixel += payload.color.to_float3() * frame_weight;
@@ -235,7 +239,6 @@ namespace cg::renderer
 				}
 			}
 		}
-		// TODO Lab: 2.06 Implement TAA in `ray_generation` method of `raytracer` class
 	}
 
 	template<typename VB, typename RT>
@@ -253,6 +256,7 @@ namespace cg::renderer
 		closest_hit_payload.t = max_t;
 		const triangle<VB>* closest_triangle = nullptr;
 
+		//+  Lab: 2.05 Adjust `trace_ray` method of `raytracer` class to traverse the acceleration structure
 		for (auto& aabb: acceleration_structures) {
 
 			if (!aabb.aabb_test(ray)) 
@@ -262,6 +266,10 @@ namespace cg::renderer
 				if (payload.t > min_t && payload.t < closest_hit_payload.t){
 					closest_hit_payload = payload;
 					closest_triangle = &triangle;
+
+					// Lab: 2.04 Adjust `trace_ray` method of `raytracer` to use `any_hit_shader`
+					if (any_hit_shader)
+						return any_hit_shader(ray, payload, triangle);
 				}
 			}
 
@@ -272,10 +280,6 @@ namespace cg::renderer
 				return closest_hit_shader(ray, closest_hit_payload, *closest_triangle, depth);
 			}
 		}
-
-
-		// TODO Lab: 2.04 Adjust `trace_ray` method of `raytracer` to use `any_hit_shader`
-		// TODO Lab: 2.05 Adjust `trace_ray` method of `raytracer` class to traverse the acceleration structure
 		return miss_shader(ray);
 	}
 
@@ -312,7 +316,7 @@ namespace cg::renderer
 	float2 raytracer<VB, RT>::get_jitter(int frame_id)
 	{
 		// Lab: 2.06 Implement `get_jitter` method of `raytracer` class
-		float2 results(0.f, 0.f);
+		float2 results{0.f, 0.f};
 		constexpr int base_x = 2;
 		int index = frame_id + 1;
 		float inv_base = 1.f / base_x;
@@ -324,9 +328,9 @@ namespace cg::renderer
 		}
 
 		constexpr int base_y = 3;
-		int index = frame_id + 1;
-		float inv_base = 1.f / base_y;
-		float fraction = inv_base;
+		index = frame_id + 1;
+		inv_base = 1.f / base_y;
+		fraction = inv_base;
 		while (index > 0) {
 			results.y += (index % base_y) * fraction;
 			index /= base_y;
@@ -367,7 +371,7 @@ namespace cg::renderer
 	inline bool aabb<VB>::aabb_test(const ray& ray) const
 	{
 		// Lab: 2.05 Implement `aabb` class
-		float3 inv_ray_direction = float3(1.f) / ray.direction();
+		float3 inv_ray_direction = float3(1.f) / ray.direction;
 		float3 t0 = (aabb_min - ray.position) * inv_ray_direction;
 		float3 t1 = (aabb_max - ray.position) * inv_ray_direction;
 		float3 tmax = max(t0, t1);
