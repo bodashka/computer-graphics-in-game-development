@@ -109,11 +109,11 @@ void cg::renderer::ray_tracing_renderer::render()
 		if (dot(normal, random_direction) < 0.f)
 			random_direction = -random_direction;
 
-		cg::renderer::ray to_next_object(position, random_direction);
-		auto next_payload = raytracer->trace_ray(to_next_object, depth);
-
-		result_color += triangle.diffuse * next_payload.color.to_float3() *
-						std::max(dot(normal, to_next_object.direction), 0.f);
+		for (auto& light: lights) {
+			cg::renderer::ray to_next_object(position, random_direction);
+			auto next_payload = raytracer->trace_ray(to_next_object, depth);
+			result_color += triangle.diffuse * next_payload.color.to_float3() * std::max(dot(normal, to_next_object.direction), 0.f);
+		}
 
 		//payload.color = cg::color::from_float3(triangle.diffuse);
 		payload.color = cg::color::from_float3(result_color);

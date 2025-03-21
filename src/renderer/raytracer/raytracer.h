@@ -221,7 +221,7 @@ namespace cg::renderer
 			for (int x = 0; x < width; x++) {
 				for (int y = 0; y < height; y++) {
 					float u = (2.f * x + jitter.x) / static_cast<float>(width - 1) - 1.f;
-					float v = (2.f * x + jitter.y) / static_cast<float>(height - 1) - 1.f;
+					float v = (2.f * y + jitter.y) / static_cast<float>(height - 1) - 1.f;
 
 					u *= static_cast<float>(width) / static_cast<float>(height); //aspect ratio
 
